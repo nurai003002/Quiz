@@ -5,7 +5,7 @@
 <head>
    <meta charset="UTF-8">
    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-   <title>Quizo HTML Template - V.2</title>
+   <title>Quizo</title>
    <!-- FontAwesome-cdn include -->
    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
    <!-- Google fonts include -->
@@ -27,44 +27,252 @@
             <div class="col step_progress d-flex d-none d-sm-block">
                <span class="step bg-white rounded-pill active"></span>
                {% for question in questions %}
-               <span class="step bg-white rounded-pill{% if forloop.first %}active{% endif %}"></span>
+               <span class="step bg-white rounded-pill{% if forloop.first %} active{% endif %}"></span>
                {% endfor %}
             </div>
          </div>
       </div>
       <div class="container">
-         <form class="multisteps_form position-relative" id="wizard" method="POST"
-            action="https://jthemes.net/themes/html/quizo/thankyou/index-2.html">
+         <form class="multisteps_form position-relative" id="wizard" method="POST" action="">
             {% for question in questions %}
-            <div class="multisteps_form_panel"> 
-               <span class="question_number text-uppercase d-flex justify-content-center align-items-center">Question
-                  1/5</span>
-               <h1 class="question_title text-center">{{question.title}}</h1>
+            <div class="multisteps_form_panel" data-question-id="{{ question.id }}">
+               <span class="question_number text-uppercase d-flex justify-content-center align-items-center">
+                  Question {{ forloop.counter }}/{{ questions.count }}
+               </span>
+               <h1 class="question_title text-center">{{ question.title }}</h1>
+
+               <!-- Уведомление о результате ответа -->
+               <div class="answer-feedback text-center mb-3" style="display: none;">
+                  <div class="alert" role="alert"></div>
+               </div>
+
                <div class="form_items d-flex justify-content-center">
                   <ul class="ps-0">
                      {% for answer in question.answers.all %}
-                     <li class="step_{{ forloop.parentloop.counter }} rounded-pill bg-white text-start animate__animated animate__fadeInRight animate_{% cycle '50' '100' '150' '200' '250' '300' %}ms">
-                        <input type="radio" 
-                              id="opt_{{ forloop.parentloop.counter }}_{{ forloop.counter }}" 
-                              name="stp_{{ forloop.parentloop.counter }}_select_option"
-                              value="{{ answer.title }}">
-                        <label for="opt_{{ forloop.parentloop.counter }}_{{ forloop.counter }}">{{ answer.title }}</label>
+                     <li
+                        class=" step_{{ forloop.parentloop.counter }} rounded-pill bg-white text-start animate__animated animate__fadeInRight animate_{% cycle '50' '100' '150' '200' '250' '300' %}ms">
+                        <input type="radio" id="opt_{{ forloop.parentloop.counter }}_{{ forloop.counter }}"
+                           name="stp_{{ forloop.parentloop.counter }}_select_option" value="{{ answer.title }}"
+                           data-question-id="{{ question.id }}">
+                        <label for="opt_{{ forloop.parentloop.counter }}_{{ forloop.counter }}">
+                           {{ answer.title }}
+                        </label>
                      </li>
                      {% endfor %}
                   </ul>
                </div>
             </div>
             {% endfor %}
+            <script>
+               document.querySelectorAll('.form_items input[type="radio"]').forEach((radio) => {
+                  radio.addEventListener('change', function () {
+                     // Удаляем класс active у всех элементов с этим radio group
+                     const name = this.name;
+                     document.querySelectorAll(`input[name="${name}"]`).forEach((el) => {
+                           el.closest('li').classList.remove('active');
+                     });
+
+                     // Добавляем active к выбранному li
+                     this.closest('li').classList.add('active');
+                  });
+               });
+               </script>
+
             <!---------- Form Button ---------->
             <div class="form_btn text-center ms-5 mt-5">
                <button type="button" class="f_btn text-uppercase rounded-pill border-0" id="prevBtn"
                   onclick="nextPrev(-1)">Last Question</button>
                <button type="button" class="f_btn text-uppercase rounded-pill border-0" id="nextBtn"
                   onclick="nextPrev(1)">Next Question</button>
+               <button type="button" class="f_btn text-uppercase rounded-pill border-0 btn-success" id="finishBtn"
+                  onclick="finishQuiz()" style="display: none;">Finish Quiz</button>
             </div>
          </form>
       </div>
    </div>
+
+   <script>
+      let currentTab = 0;
+      let totalScore = 0;
+      let userAnswers = {};
+
+      // Показать текущую вкладку
+      showTab(currentTab);
+
+      function showTab(n) {
+         let tabs = document.getElementsByClassName("multisteps_form_panel");
+
+         if (n >= tabs.length) {
+            // Показать кнопку завершения на последнем вопросе
+            document.getElementById("finishBtn").style.display = "inline-block";
+            document.getElementById("nextBtn").style.display = "none";
+            return false;
+         }
+
+         if (n < 0) {
+            return false;
+         }
+
+         // Скрыть все вкладки
+         for (let i = 0; i < tabs.length; i++) {
+            tabs[i].style.display = "none";
+         }
+
+         // Показать текущую вкладку
+         tabs[n].style.display = "block";
+
+         // Управление кнопками
+         if (n == 0) {
+            document.getElementById("prevBtn").style.display = "none";
+         } else {
+            document.getElementById("prevBtn").style.display = "inline-block";
+         }
+
+         if (n == (tabs.length - 1)) {
+            document.getElementById("nextBtn").style.display = "none";
+            document.getElementById("finishBtn").style.display = "inline-block";
+         } else {
+            document.getElementById("nextBtn").style.display = "inline-block";
+            document.getElementById("finishBtn").style.display = "none";
+         }
+
+         // Обновить индикаторы прогресса
+         fixStepIndicator(n);
+      }
+
+      function nextPrev(n) {
+         let tabs = document.getElementsByClassName("multisteps_form_panel");
+
+         // Проверить, выбран ли ответ на текущем вопросе
+         if (n == 1 && !validateForm()) return false;
+
+         // Скрыть текущую вкладку
+         tabs[currentTab].style.display = "none";
+
+         // Увеличить или уменьшить currentTab
+         currentTab = currentTab + n;
+
+         // Показать правильную вкладку
+         showTab(currentTab);
+      }
+
+      function validateForm() {
+         let tabs = document.getElementsByClassName("multisteps_form_panel");
+         let currentQuestionId = tabs[currentTab].getAttribute('data-question-id');
+         let inputs = tabs[currentTab].getElementsByTagName("input");
+         let valid = false;
+
+         // Проверить, выбран ли радио-кнопка
+         for (let i = 0; i < inputs.length; i++) {
+            if (inputs[i].checked) {
+               valid = true;
+               // Сохранить ответ пользователя
+               userAnswers[currentQuestionId] = inputs[i].value;
+
+               // Проверить ответ через AJAX
+               checkAnswer(currentQuestionId, inputs[i].value, tabs[currentTab]);
+               break;
+            }
+         }
+
+         if (!valid) {
+            alert("Please select an answer!");
+         }
+
+         return valid;
+      }
+
+      function checkAnswer(questionId, selectedAnswer, currentTab) {
+         fetch('/check-answer/', {
+            method: 'POST',
+            headers: {
+               'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+               question_id: questionId,
+               selected_answer: selectedAnswer
+            })
+         })
+            .then(response => response.json())
+            .then(data => {
+               showAnswerFeedback(data, currentTab);
+               if (data.is_correct) {
+                  totalScore++;
+                  updateScoreDisplay();
+               }
+            })
+            .catch(error => {
+               console.error('Error:', error);
+            });
+      }
+
+      function showAnswerFeedback(data, currentTab) {
+         let feedbackDiv = currentTab.querySelector('.answer-feedback');
+         let alertDiv = feedbackDiv.querySelector('.alert');
+
+         if (data.is_correct) {
+            alertDiv.className = 'alert alert-success';
+            alertDiv.textContent = data.message;
+         } else {
+            alertDiv.className = 'alert alert-danger';
+            alertDiv.textContent = data.message;
+         }
+
+         feedbackDiv.style.display = 'block';
+
+         // Скрыть уведомление через 3 секунды
+         setTimeout(() => {
+            feedbackDiv.style.display = 'none';
+         }, 3000);
+      }
+
+      function updateScoreDisplay() {
+         document.getElementById('current-score').textContent = totalScore;
+      }
+
+      function fixStepIndicator(n) {
+         let steps = document.getElementsByClassName("step");
+         for (let i = 0; i < steps.length; i++) {
+            steps[i].className = steps[i].className.replace(" active", "");
+         }
+         if (steps[n]) {
+            steps[n].className += " active";
+         }
+      }
+
+      function finishQuiz() {
+         // Отправить финальные результаты
+         fetch('/submit-quiz/', {
+            method: 'POST',
+            headers: {
+               'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+               answers: userAnswers
+            })
+         })
+            .then(response => response.json())
+            .then(data => {
+               alert(`Quiz completed!\nYour result: ${data.correct_answers}/${data.total_questions} (${data.percentage}%)\nScore: ${data.score}`);
+
+               // Отправляем результат в терминал
+               fetch('/quiz-result/' + data.result_id + '/', {
+                  method: 'GET'
+               })
+                  .then(response => response.json())
+                  .then(terminalData => {
+                     console.log('Results sent to server terminal');
+                  })
+                  .catch(error => {
+                     console.error('Error sending to terminal:', error);
+                  });
+            })
+            .catch(error => {
+               console.error('Error:', error);
+               alert('An error occurred while submitting results');
+            });
+      }
+   </script>
    <!-- jQuery-js include -->
    <script src="{% static 'assets/js/jquery-3.6.0.min.js' %}"></script>
    <!-- Bootstrap-js include -->
